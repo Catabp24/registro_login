@@ -1,31 +1,25 @@
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config()
 }
+const express = require('express');
+const connectDB = require('./db'); 
+const app = express();
+const User = require('./models/User');
+connectDB();
 
-const express = require('express')
-const app = express()
 const bcrypt = require('bcrypt')
 const passport = require('passport')
 const flash = require('express-flash')
 const session = require('express-session')
 const methodOverride = require('method-override')
-
 const initializePassport = require('./passport-config')
-
-
-
-
 const bodyParser = require('body-parser');
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
 
 
-initializePassport(
-  passport,
-  email => users.find(user => user.email === email),
-  id => users.find(user => user.id === id)
-)
+initializePassport(passport);
 
 const users = []
 
@@ -41,9 +35,10 @@ app.use(passport.initialize())
 app.use(passport.session())
 app.use(methodOverride('_method'))
 
+
 app.get('/', checkAuthenticated, (req, res) => {
-  res.render('index.ejs', { name: req.user.name })
-})
+  res.render('index.ejs', { name: req.user.name });
+});
 
 app.get('/login', checkNotAuthenticated, (req, res) => {
   res.render('login.ejs')
@@ -59,20 +54,35 @@ app.get('/register', checkNotAuthenticated, (req, res) => {
   res.render('register.ejs')
 })
 
+
+
+
 app.post('/register', checkNotAuthenticated, async (req, res) => {
   try {
-    const hashedPassword = await bcrypt.hash(req.body.password, 10)
-    users.push({
-      id: Date.now().toString(),
-      name: req.body.name,
-      email: req.body.email,
+    const { name, email, password } = req.body;
+    
+    // Verificar si el correo electrónico ya está registrado
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      req.flash('error', 'El correo electrónico ya está registrado');
+      return res.redirect('/register');
+    }
+    
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = new User({
+      name,
+      email,
       password: hashedPassword
-    })
-    res.redirect('/login')
-  } catch {
-    res.redirect('/register')
+    });
+    
+    await newUser.save(); 
+
+    res.redirect('/login');
+  } catch (error) {
+    console.error(error);
+    res.redirect('/register');
   }
-})
+});
 
 app.delete('/logout', (req, res, next) => {
   req.logout((err) => {
